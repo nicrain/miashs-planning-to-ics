@@ -1,0 +1,13 @@
+# MIASHS 课程计划解析器 - 依赖包列表
+# 
+# 安装方法:
+# pip install -r requirements.txt
+
+requests>=2.25.0
+beautifulsoup4>=4.9.0
+ics>=0.7.0
+
+# 可选的开发依赖
+# pytest>=6.0.0  # 用于单元测试
+# black>=21.0.0   # 用于代码格式化
+# mypy>=0.900     # 用于类型检查
