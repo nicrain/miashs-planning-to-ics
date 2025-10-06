@@ -1,12 +1,13 @@
-# 📅 课程计划解析器 V5.0
+# 📅 课程计划解析器 V5.1
 
-> 自动从Google Sheets生成ICS日历文件，支持智能删除线检测
+> 自动从Google Sheets生成ICS日历文件，支持智能删除线检测和多时间段事件解析
 
 ## 🎯 功能特性
 
 ### 核心功能
 - **动态URL提取**: 自动从主页面获取所有月份的Google Sheets链接
 - **智能删除线检测**: 支持CSS类和内联样式两种删除线检测方式
+- **多时间段事件解析**: 自动识别并创建同一单元格中多个时间段的独立事件
 - **多层次取消检测**: 区分整日取消和部分课程取消
 - **配置文件支持**: 手动维护额外的取消日期
 - **完整时区支持**: 使用巴黎时区处理所有时间
@@ -14,6 +15,7 @@
 ### 检测能力
 - ✅ **CSS类删除线** - 检测如`.s15`等样式类的整日取消
 - ✅ **内联span删除线** - 检测单个课程的部分取消
+- ✅ **多时间段解析** - 自动识别如"11h-13h : LSF niveau 1"和"15h-17h : LSF niveau 3"的独立事件
 - ✅ **配置文件取消** - 支持手动添加取消日期
 - ✅ **智能URL参数** - 自动添加`&widget=false`获取完整样式
 
@@ -44,9 +46,11 @@ INFO: 正在处理 Septembre 的数据...
      ✓ 找到包含样式的HTML内容!
      🚫 检测到部分课程取消: 24/09/2025
          取消内容: 18h-21h : Gestion de projet Mohammed Zbakh (1)
-INFO: 处理 24/09/2025 的课程...
-         ⚠️ 跳过被取消的事件: 18h-21h : Gestion de projet...
-INFO: 添加事件: Agents artificiels (3) - Salvatore Anzalone
+INFO: 处理 09/10/2025 的课程...
+INFO: 添加事件: Arduino  (6) - Salvatore Anzalone
+INFO: 添加事件: LSF niveau 1 - Marie Josée Henriquet
+INFO: 添加事件: LSF niveau 3 - Marie Josée Henriquet  ← 自动创建独立事件
+INFO: 添加事件: Conférence
 INFO: 🎉 成功! 日历文件已生成: master_handi_schedule.ics
 ```
 
@@ -82,6 +86,12 @@ class ScheduleProcessor:
 5. **ICS文件生成** - 生成标准日历格式文件
 
 ## 📈 版本历史
+
+### V5.1 (2025-10-06) - 多时间段事件解析
+- 🎯 **新功能**: 支持同一单元格中多个时间段的独立事件创建
+- 🔧 **修复**: 解决了LSF niveau 3等课程被合并到其他事件描述中的问题
+- 📈 **改进**: 事件总数从132个增加到148个，提高日历完整性
+- 💡 **示例**: "11h-13h : LSF niveau 1" + "15h-17h : LSF niveau 3" 现在创建两个独立事件
 
 ### V5.0 (2025-10-06) - 重大架构升级
 - 🎯 **新功能**: HTML删除线自动检测
@@ -122,6 +132,17 @@ class ScheduleProcessor:
 </span>
 ```
 → 检测到部分取消: 24/09/2025的18h-21h课程
+
+### 多时间段事件解析
+```
+单元格内容:
+11h-13h : LSF niveau 1
+15h-17h : LSF niveau 3
+Marie Josée Henriquet
+```
+→ 自动创建两个独立事件:
+- 11:00-13:00: LSF niveau 1 - Marie Josée Henriquet
+- 15:00-17:00: LSF niveau 3 - Marie Josée Henriquet
 
 ## 📦 依赖项
 
