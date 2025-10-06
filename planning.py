@@ -435,17 +435,16 @@ def parse_cell_content(cell_text: str, year: int, month: int, day: int,
         if not lines:
             continue
             
-        # 查找时间信息
-        time_line = None
-        event_name = "Événement"
-        instructor = ""
-        description_lines = []
+        # 查找所有时间信息（改进：找出所有时间段，而不只是第一个）
+        time_events = []
+        main_instructor = ""
+        global_description_lines = []
         
+        # 首先收集所有时间匹配和基本信息
         for i, line in enumerate(lines):
             # 匹配时间格式：9h-12h, 14h30-17h30, 18h-21h 等
-            time_match = re.search(Config.TIME_PATTERN, line)
-            if time_match:
-                time_line = line
+            time_matches = re.finditer(Config.TIME_PATTERN, line)
+            for time_match in time_matches:
                 start_str, end_str = time_match.groups()
                 
                 # 提取课程名称（通常在时间后面）
@@ -454,23 +453,125 @@ def parse_cell_content(cell_text: str, year: int, month: int, day: int,
                 if remaining_text.startswith(':'):
                     remaining_text = remaining_text[1:].strip()
                 
-                if remaining_text:
-                    event_name = remaining_text
-                elif i + 1 < len(lines):
-                    event_name = lines[i + 1]
+                event_name = remaining_text if remaining_text else "Événement"
                 
-                # 查找教师名称（通常是最后一行或特定格式）
-                for j in range(i + 1, len(lines)):
-                    line_text = lines[j].strip()
-                    # 教师名称通常是姓名格式
-                    if re.match(r'^[A-Z][a-z]+\s+[A-Z][a-z]+', line_text) or 'Mohammed' in line_text or 'Marie' in line_text:
-                        instructor = line_text
-                    else:
-                        description_lines.append(line_text)
-                
-                break
+                time_events.append({
+                    'line': line,
+                    'start_str': start_str,
+                    'end_str': end_str,
+                    'event_name': event_name,
+                    'original_line_index': i
+                })
+            
+            # 查找教师名称（通常是姓名格式）
+            line_text = line.strip()
+            if re.match(r'^[A-Z][a-z]+\s+[A-Z][a-z]+', line_text) or 'Mohammed' in line_text or 'Marie' in line_text:
+                if not main_instructor:  # 只取第一个找到的教师名称作为主教师
+                    main_instructor = line_text
+            elif not any(Config.TIME_PATTERN in line for pattern in [Config.TIME_PATTERN] if re.search(pattern, line)):
+                # 如果这行不包含时间信息，可能是描述
+                global_description_lines.append(line_text)
         
-        if time_line:
+        # 如果没有找到任何时间事件，创建一个默认事件
+        if not time_events:
+            time_line = None
+            event_name = "Événement"
+            instructor = ""
+            description_lines = []
+            
+            for i, line in enumerate(lines):
+                # 匹配时间格式：9h-12h, 14h30-17h30, 18h-21h 等
+                time_match = re.search(Config.TIME_PATTERN, line)
+                if time_match:
+                    time_line = line
+                    start_str, end_str = time_match.groups()
+                    
+                    # 提取课程名称（通常在时间后面）
+                    time_end = time_match.end()
+                    remaining_text = line[time_end:].strip()
+                    if remaining_text.startswith(':'):
+                        remaining_text = remaining_text[1:].strip()
+                    
+                    if remaining_text:
+                        event_name = remaining_text
+                    elif i + 1 < len(lines):
+                        event_name = lines[i + 1]
+                    
+                    # 查找教师名称（通常是最后一行或特定格式）
+                    for j in range(i + 1, len(lines)):
+                        line_text = lines[j].strip()
+                        # 教师名称通常是姓名格式
+                        if re.match(r'^[A-Z][a-z]+\s+[A-Z][a-z]+', line_text) or 'Mohammed' in line_text or 'Marie' in line_text:
+                            instructor = line_text
+                        else:
+                            description_lines.append(line_text)
+                    
+                    break
+        
+        # 处理找到的时间事件
+        if time_events:
+            # 为每个时间段创建独立的事件
+            for time_event in time_events:
+                time_line = time_event['line']
+                start_str = time_event['start_str']
+                end_str = time_event['end_str']
+                event_name = time_event['event_name']
+                
+                # 检查这个事件是否被部分取消
+                event_cancelled = False
+                for cancelled_content in cancelled_content_list:
+                    if cancelled_content and (
+                        cancelled_content in block or 
+                        any(cancelled_content in line for line in lines) or
+                        f"{start_str}-{end_str}" in cancelled_content
+                    ):
+                        logger.info(f"⚠️  跳过被取消的事件: {time_line[:50]}...")
+                        event_cancelled = True
+                        break
+                
+                if event_cancelled:
+                    continue
+                    
+                try:
+                    start_time = parse_time(start_str)
+                    end_time = parse_time(end_str)
+                    
+                    if start_time and end_time:
+                        event = Event()
+                        # 使用巴黎时区
+                        paris_tz = ZoneInfo(Config.TIMEZONE)
+                        event.begin = datetime(year, month, day, start_time.hour, start_time.minute, tzinfo=paris_tz)
+                        event.end = datetime(year, month, day, end_time.hour, end_time.minute, tzinfo=paris_tz)
+                        
+                        # 构建事件标题
+                        if main_instructor:
+                            event.name = f"{event_name} - {main_instructor}"
+                        else:
+                            event.name = event_name
+                        
+                        # 构建描述
+                        desc_parts = []
+                        if main_instructor and main_instructor not in event_name:
+                            desc_parts.append(f"教师: {main_instructor}")
+                        
+                        # 添加其他时间段信息到描述中（如果有多个时间段）
+                        if len(time_events) > 1:
+                            other_times = [f"{te['start_str']}-{te['end_str']} : {te['event_name']}" 
+                                         for te in time_events if te != time_event]
+                            if other_times:
+                                desc_parts.extend(other_times)
+                        
+                        if global_description_lines:
+                            desc_parts.extend(global_description_lines)
+                        
+                        event.description = "\n".join(desc_parts) if desc_parts else ""
+                        events.append(event)
+                        
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"解析事件时出错 '{time_line}': {e}")
+        
+        elif time_line:
+            # 处理旧的单时间事件逻辑（作为备用）
             # 检查这个事件是否被部分取消
             event_cancelled = False
             for cancelled_content in cancelled_content_list:
