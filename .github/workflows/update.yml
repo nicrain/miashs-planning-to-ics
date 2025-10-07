@@ -1,0 +1,48 @@
+# 文件名: .github/workflows/update.yml
+
+name: Scheduled Calendar Generator
+
+on:
+  # 使用 Cron 语法设置定时运行。
+  # 示例：'0 */4 * * *' 表示每 4 小时执行一次 (UTC 时间)
+  schedule:
+    - cron: '0 */4 * * *' 
+  # 允许在 GitHub 界面手动点击按钮运行，方便测试
+  workflow_dispatch:
+
+jobs:
+  update_calendar:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # 必须设置 fetch-depth: 0，否则无法在后续步骤中提交代码
+          fetch-depth: 0
+          
+      # 2. 设置 Python 环境
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10' # 确保使用您需要的 Python 版本
+
+      # 3. 安装依赖
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # !!! 将您的第三方依赖库替换或添加到这里 !!!
+          pip install requests beautifulsoup4 ics 
+
+      # 4. 运行脚本，生成 ICS 文件
+      - name: Execute Python Script
+        run: python planning.py
+
+      # 5. 自动提交和推送更新的文件
+      - name: Commit and Push new ICS file
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          # 提交信息，加上 [skip ci] 避免再次触发新的 workflow 运行
+          commit_message: "🤖 Feat: Auto update calendar.ics [skip ci]"
+          # 只提交生成的 ICS 文件
+          files: master_handi_schedule.ics
