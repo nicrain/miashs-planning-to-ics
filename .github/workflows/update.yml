@@ -13,6 +13,11 @@ on:
 jobs:
   update_calendar:
     runs-on: ubuntu-latest
+
+    # 🚀 关键修复：添加权限块 🚀
+    permissions:
+      contents: write # 授予机器人写入内容的权限
+      
     steps:
       # 1. 检出代码
       - name: Checkout repository
