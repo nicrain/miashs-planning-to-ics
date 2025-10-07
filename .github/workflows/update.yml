@@ -43,6 +43,6 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           # 提交信息，加上 [skip ci] 避免再次触发新的 workflow 运行
-          commit_message: "🤖 Feat: Auto update calendar.ics [skip ci]"
+          commit_message: "🤖 Feat: Auto update master_handi_schedule.ics [skip ci]"
           # 只提交生成的 ICS 文件
-          files: master_handi_schedule.ics
+          file_pattern: master_handi_schedule.ics
