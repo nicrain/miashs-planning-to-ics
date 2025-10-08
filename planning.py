@@ -653,17 +653,8 @@ class ScheduleProcessor:
         # Phase 1: 安全的标准属性
         self.calendar.method = Config.CALENDAR_METHOD
         
-        # Phase 2: 标准更新控制
-        if Config.ENABLE_REFRESH_INTERVAL:
-            # REFRESH-INTERVAL使用ISO 8601持续时间格式
-            refresh_interval = f"PT{Config.REFRESH_INTERVAL_HOURS}H"
-            # 注意：ics库可能不直接支持这些属性，我们需要在保存时手动添加
-            self.calendar.extra.append(f"REFRESH-INTERVAL:{refresh_interval}")
-        
-        # Phase 3: 扩展属性  
-        if Config.PUBLISH_TTL_HOURS:
-            ttl_interval = f"PT{Config.PUBLISH_TTL_HOURS}H"
-            self.calendar.extra.append(f"X-PUBLISHED-TTL:{ttl_interval}")
+        # 不在这里设置extra属性，避免序列化问题
+        # 所有特殊属性都在保存时通过_inject_webcal_properties添加
         
         logger.info(f"📡 配置Webcal订阅: 每{Config.REFRESH_INTERVAL_HOURS}小时更新")
         
@@ -813,8 +804,20 @@ class ScheduleProcessor:
     def _save_calendar(self) -> bool:
         """保存日历到文件，包含Webcal订阅属性"""
         try:
-            # 获取原始的ICS内容
-            ics_content = str(self.calendar)
+            # 获取原始的ICS内容（使用serialize方法避免clone错误）
+            try:
+                # 推荐方法：使用serialize()
+                ics_content = self.calendar.serialize()
+            except AttributeError:
+                # 备用方法：使用serialize_iter()
+                try:
+                    ics_content = ''.join(self.calendar.serialize_iter())
+                except AttributeError:
+                    # 最后备用：使用str()但会有警告
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        ics_content = str(self.calendar)
             
             # 手动注入Webcal订阅属性
             ics_content = self._inject_webcal_properties(ics_content)
@@ -841,35 +844,35 @@ class ScheduleProcessor:
     
     def _inject_webcal_properties(self, ics_content: str) -> str:
         """在ICS内容中注入Webcal订阅属性"""
-        lines = ics_content.split('\n')
-        injected_lines = []
-        
-        for line in lines:
-            injected_lines.append(line)
+        try:
+            lines = ics_content.split('\n')
+            injected_lines = []
             
-            # 在VCALENDAR开始后立即添加属性
-            if line.strip() == 'BEGIN:VCALENDAR':
-                # Phase 1: 标准属性 (已通过calendar.method设置)
+            for line in lines:
+                injected_lines.append(line)
                 
-                # Phase 2: 标准更新控制
-                if Config.ENABLE_REFRESH_INTERVAL:
-                    refresh_interval = f"PT{Config.REFRESH_INTERVAL_HOURS}H"
-                    injected_lines.append(f"REFRESH-INTERVAL:{refresh_interval}")
-                
-                # Phase 3: 扩展属性
-                if Config.PUBLISH_TTL_HOURS:
-                    ttl_interval = f"PT{Config.PUBLISH_TTL_HOURS}H"
-                    injected_lines.append(f"X-PUBLISHED-TTL:{ttl_interval}")
-                
-                # 添加生成时间戳
-                paris_tz = ZoneInfo(Config.TIMEZONE)
-                current_time = datetime.now(tz=paris_tz)
-                timestamp = current_time.strftime('%Y%m%dT%H%M%SZ')
-                injected_lines.append(f"X-WR-CALDESC:MIASHS课程计划 - 每{Config.REFRESH_INTERVAL_HOURS}小时更新")
-                injected_lines.append(f"X-WR-CALNAME:MIASHS Master Handicap Schedule")
-                injected_lines.append(f"X-PUBLISHED-TTL:PT{Config.PUBLISH_TTL_HOURS}H")
-        
-        return '\n'.join(injected_lines)
+                # 在VCALENDAR开始后立即添加属性
+                if line.strip() == 'BEGIN:VCALENDAR':
+                    # Phase 2: 标准更新控制
+                    if Config.ENABLE_REFRESH_INTERVAL:
+                        refresh_interval = f"PT{Config.REFRESH_INTERVAL_HOURS}H"
+                        injected_lines.append(f"REFRESH-INTERVAL:{refresh_interval}")
+                    
+                    # Phase 3: 扩展属性
+                    if Config.PUBLISH_TTL_HOURS:
+                        ttl_interval = f"PT{Config.PUBLISH_TTL_HOURS}H"
+                        injected_lines.append(f"X-PUBLISHED-TTL:{ttl_interval}")
+                    
+                    # 添加日历描述信息
+                    injected_lines.append(f"X-WR-CALDESC:MIASHS课程计划 - 每{Config.REFRESH_INTERVAL_HOURS}小时更新")
+                    injected_lines.append(f"X-WR-CALNAME:MIASHS Master Handicap Schedule")
+            
+            return '\n'.join(injected_lines)
+            
+        except Exception as e:
+            logger.error(f"注入Webcal属性失败: {e}")
+            # 返回原始内容，至少保证基本功能
+            return ics_content
 
 
 # 保持兼容性的独立函数
