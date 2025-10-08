@@ -64,6 +64,12 @@ class Config:
         'é': 'e', 'è': 'e', 'ç': 'c', 'à': 'a', 'ù': 'u', 'ô': 'o'
     }
     
+    # Webcal订阅更新周期配置
+    ENABLE_REFRESH_INTERVAL = True
+    REFRESH_INTERVAL_HOURS = 1  # 每小时检查更新
+    PUBLISH_TTL_HOURS = 1       # 1小时缓存TTL
+    CALENDAR_METHOD = "PUBLISH" # 发布模式
+    
     # 标准请求头
     HEADERS = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -565,6 +571,11 @@ def parse_cell_content(cell_text: str, year: int, month: int, day: int,
                             desc_parts.extend(global_description_lines)
                         
                         event.description = "\n".join(desc_parts) if desc_parts else ""
+                        
+                        # 添加时间戳 (Phase 1: 标准必需属性)
+                        event.created = datetime.now(tz=paris_tz)
+                        event.last_modified = datetime.now(tz=paris_tz)
+                        
                         events.append(event)
                         
                 except (ValueError, IndexError) as e:
@@ -615,6 +626,12 @@ def parse_cell_content(cell_text: str, year: int, month: int, day: int,
                         desc_parts.extend(description_lines)
                     
                     event.description = "\n".join(desc_parts) if desc_parts else ""
+                    
+                    # 添加时间戳 (Phase 1: 标准必需属性)
+                    paris_tz = ZoneInfo(Config.TIMEZONE)
+                    event.created = datetime.now(tz=paris_tz)
+                    event.last_modified = datetime.now(tz=paris_tz)
+                    
                     events.append(event)
                     
             except (ValueError, IndexError) as e:
@@ -629,6 +646,26 @@ class ScheduleProcessor:
     def __init__(self):
         self.calendar = Calendar()
         self.config_cancelled_dates = load_cancelled_dates()
+        self._setup_calendar_properties()
+    
+    def _setup_calendar_properties(self):
+        """设置日历的Webcal订阅属性"""
+        # Phase 1: 安全的标准属性
+        self.calendar.method = Config.CALENDAR_METHOD
+        
+        # Phase 2: 标准更新控制
+        if Config.ENABLE_REFRESH_INTERVAL:
+            # REFRESH-INTERVAL使用ISO 8601持续时间格式
+            refresh_interval = f"PT{Config.REFRESH_INTERVAL_HOURS}H"
+            # 注意：ics库可能不直接支持这些属性，我们需要在保存时手动添加
+            self.calendar.extra.append(f"REFRESH-INTERVAL:{refresh_interval}")
+        
+        # Phase 3: 扩展属性  
+        if Config.PUBLISH_TTL_HOURS:
+            ttl_interval = f"PT{Config.PUBLISH_TTL_HOURS}H"
+            self.calendar.extra.append(f"X-PUBLISHED-TTL:{ttl_interval}")
+        
+        logger.info(f"📡 配置Webcal订阅: 每{Config.REFRESH_INTERVAL_HOURS}小时更新")
         
     def process_schedule(self) -> bool:
         """
@@ -774,14 +811,25 @@ class ScheduleProcessor:
         return None
     
     def _save_calendar(self) -> bool:
-        """保存日历到文件"""
+        """保存日历到文件，包含Webcal订阅属性"""
         try:
+            # 获取原始的ICS内容
+            ics_content = str(self.calendar)
+            
+            # 手动注入Webcal订阅属性
+            ics_content = self._inject_webcal_properties(ics_content)
+            
             with open(Config.OUTPUT_FILENAME, 'w', encoding='utf-8') as f:
-                f.writelines(self.calendar.serialize_iter())
+                f.write(ics_content)
             
             logger.info(f"🎉 成功! 日历文件已生成: {os.path.abspath(Config.OUTPUT_FILENAME)}")
             logger.info("请将此文件导入您的iPhone日历。")
             logger.info(f"总共生成了 {len(self.calendar.events)} 个事件")
+            
+            # 显示Webcal配置信息
+            if Config.ENABLE_REFRESH_INTERVAL:
+                logger.info(f"📡 已配置Webcal订阅: 每{Config.REFRESH_INTERVAL_HOURS}小时更新")
+            
             return True
             
         except PermissionError:
@@ -790,6 +838,38 @@ class ScheduleProcessor:
         except Exception as e:
             logger.error(f"保存日历文件失败: {e}")
             return False
+    
+    def _inject_webcal_properties(self, ics_content: str) -> str:
+        """在ICS内容中注入Webcal订阅属性"""
+        lines = ics_content.split('\n')
+        injected_lines = []
+        
+        for line in lines:
+            injected_lines.append(line)
+            
+            # 在VCALENDAR开始后立即添加属性
+            if line.strip() == 'BEGIN:VCALENDAR':
+                # Phase 1: 标准属性 (已通过calendar.method设置)
+                
+                # Phase 2: 标准更新控制
+                if Config.ENABLE_REFRESH_INTERVAL:
+                    refresh_interval = f"PT{Config.REFRESH_INTERVAL_HOURS}H"
+                    injected_lines.append(f"REFRESH-INTERVAL:{refresh_interval}")
+                
+                # Phase 3: 扩展属性
+                if Config.PUBLISH_TTL_HOURS:
+                    ttl_interval = f"PT{Config.PUBLISH_TTL_HOURS}H"
+                    injected_lines.append(f"X-PUBLISHED-TTL:{ttl_interval}")
+                
+                # 添加生成时间戳
+                paris_tz = ZoneInfo(Config.TIMEZONE)
+                current_time = datetime.now(tz=paris_tz)
+                timestamp = current_time.strftime('%Y%m%dT%H%M%SZ')
+                injected_lines.append(f"X-WR-CALDESC:MIASHS课程计划 - 每{Config.REFRESH_INTERVAL_HOURS}小时更新")
+                injected_lines.append(f"X-WR-CALNAME:MIASHS Master Handicap Schedule")
+                injected_lines.append(f"X-PUBLISHED-TTL:PT{Config.PUBLISH_TTL_HOURS}H")
+        
+        return '\n'.join(injected_lines)
 
 
 # 保持兼容性的独立函数
