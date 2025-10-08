@@ -107,7 +107,7 @@ venv.bak/
 dmypy.json
 
 # Generated ICS files
-*.ics
+# *.ics
 
 # macOS
 .DS_Store
