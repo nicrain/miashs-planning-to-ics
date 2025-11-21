@@ -52,7 +52,8 @@ class Config:
     ]
     
     # 时间解析配置
-    TIME_PATTERN = r'(\d{1,2}h(?:\d{2})?)\s*-\s*(\d{1,2}h(?:\d{2})?)'
+    # 支持 h 和 : 作为分隔符
+    TIME_PATTERN = r'(\d{1,2}(?:h|:)(?:\d{2})?)\s*-\s*(\d{1,2}(?:h|:)(?:\d{2})?)'
     DATE_PATTERN = r'(\d{1,2})/(\d{1,2})(?:/(\d{4}))?'
     
     # 支持的月份名称（含字符标准化映射）
@@ -407,6 +408,9 @@ def parse_html_for_strikethrough(html_source: Union[str, os.PathLike]) -> Tuple[
 
 def parse_time(time_str: str) -> Optional[ParsedTime]:
     """解析时间字符串，返回ParsedTime对象"""
+    # 统一格式：将 : 替换为 h，方便处理
+    time_str = time_str.lower().replace(':', 'h')
+    
     if 'h' in time_str:
         parts = time_str.split('h')
         try:
@@ -550,10 +554,16 @@ def parse_cell_content(cell_text: str, year: int, month: int, day: int,
                         event.end = datetime(year, month, day, end_time.hour, end_time.minute, tzinfo=paris_tz)
                         
                         # 构建事件标题
+                        final_event_name = event_name
+                        
+                        # 如果事件名称是默认值，且有全局描述行，尝试使用第一行描述作为标题
+                        if final_event_name == "Événement" and global_description_lines:
+                            final_event_name = global_description_lines[0]
+                        
                         if main_instructor:
-                            event.name = f"{event_name} - {main_instructor}"
+                            event.name = f"{final_event_name} - {main_instructor}"
                         else:
-                            event.name = event_name
+                            event.name = final_event_name
                         
                         # 构建描述
                         desc_parts = []
@@ -636,6 +646,37 @@ def parse_cell_content(cell_text: str, year: int, month: int, day: int,
                     
             except (ValueError, IndexError) as e:
                 logger.warning(f"解析事件时出错 '{time_line}': {e}")
+        
+        else:
+            # 处理没有时间信息的事件块 (例如 "Projets collaboratifs")
+            # 检查这个事件是否被取消
+            event_cancelled = False
+            for cancelled_content in cancelled_content_list:
+                if cancelled_content and cancelled_content in block:
+                    logger.info(f"⚠️  跳过被取消的事件: {block[:50]}...")
+                    event_cancelled = True
+                    break
+            
+            if not event_cancelled and block.strip():
+                # 创建全天事件
+                event = Event()
+                paris_tz = ZoneInfo(Config.TIMEZONE)
+                event.begin = datetime(year, month, day, tzinfo=paris_tz)
+                event.make_all_day()
+                
+                # 使用第一行作为标题
+                lines = block.strip().split('\n')
+                event.name = lines[0].strip()
+                
+                # 其余作为描述
+                if len(lines) > 1:
+                    event.description = "\n".join(line.strip() for line in lines[1:])
+                
+                # 添加时间戳
+                event.created = datetime.now(tz=paris_tz)
+                event.last_modified = datetime.now(tz=paris_tz)
+                
+                events.append(event)
     
     return events
 
