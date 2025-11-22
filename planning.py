@@ -660,8 +660,8 @@ def parse_cell_content(cell_text: str, year: int, month: int, day: int,
             if not event_cancelled and block.strip():
                 # 创建全天事件
                 event = Event()
-                paris_tz = ZoneInfo(Config.TIMEZONE)
-                event.begin = datetime(year, month, day, tzinfo=paris_tz)
+                # 使用naive datetime避免时区转换导致日期偏移 (例如 00:00 Paris -> 23:00 UTC 前一天)
+                event.begin = datetime(year, month, day)
                 event.make_all_day()
                 
                 # 使用第一行作为标题
@@ -673,6 +673,7 @@ def parse_cell_content(cell_text: str, year: int, month: int, day: int,
                     event.description = "\n".join(line.strip() for line in lines[1:])
                 
                 # 添加时间戳
+                paris_tz = ZoneInfo(Config.TIMEZONE)
                 event.created = datetime.now(tz=paris_tz)
                 event.last_modified = datetime.now(tz=paris_tz)
                 
