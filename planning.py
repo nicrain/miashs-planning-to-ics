@@ -200,7 +200,8 @@ def parse_date_string(date_str: str) -> Optional[Tuple[int, int, int]]:
     if date_match:
         day = int(date_match.group(1))
         month = int(date_match.group(2))
-        year = int(date_match.group(3)) if date_match.group(3) else (2026 if month in [1, 2] else 2025)
+        # 1月到7月属于2026年（春季学期），8月到12月属于2025年（秋季学期）
+        year = int(date_match.group(3)) if date_match.group(3) else (2026 if 1 <= month <= 7 else 2025)
         
         # 基本日期验证
         if not (1 <= day <= 31 and 1 <= month <= 12):
@@ -840,7 +841,8 @@ class ScheduleProcessor:
         date_match = re.search(r'(\d{1,2})/(\d{1,2})', cell)
         if date_match:
             day, month = int(date_match.group(1)), int(date_match.group(2))
-            year = 2026 if month in [1, 2] else 2025
+            # 1月到7月属于2026年（春季学期），8月到12月属于2025年（秋季学期）
+            year = 2026 if 1 <= month <= 7 else 2025
             return (year, month, day)
         return None
     
