@@ -361,7 +361,8 @@ def parse_html_for_strikethrough(html_source: Union[str, os.PathLike]) -> Tuple[
                                 date_matches = re.findall(r'\b(\d{1,2})/(\d{1,2})\b', date_text)
                                 for day_str, month_str in date_matches:
                                     day, month = int(day_str), int(month_str)
-                                    year = 2026 if month in [1, 2] else 2025
+                                    # 1月到7月属于2026年（春季学期），8月到12月属于2025年（秋季学期）
+                                    year = 2026 if 1 <= month <= 7 else 2025
                                     cancelled_dates.add((year, month, day))
                                     logger.info(f"🚫 检测到整日课程取消: {day:02d}/{month:02d}/{year}")
         
@@ -392,7 +393,8 @@ def parse_html_for_strikethrough(html_source: Union[str, os.PathLike]) -> Tuple[
                             date_matches = re.findall(r'\b(\d{1,2})/(\d{1,2})\b', date_text)
                             for day_str, month_str in date_matches:
                                 day, month = int(day_str), int(month_str)
-                                year = 2026 if month in [1, 2] else 2025
+                                # 1月到7月属于2026年（春季学期），8月到12月属于2025年（秋季学期）
+                                year = 2026 if 1 <= month <= 7 else 2025
                                 
                                 cancelled_content = span.get_text(strip=True)
                                 cancelled_events.append(CancelledEvent(
