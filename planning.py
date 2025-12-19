@@ -58,7 +58,8 @@ class Config:
     
     # 支持的月份名称（含字符标准化映射）
     SUPPORTED_MONTHS = {
-        'septembre', 'octobre', 'novembre', 'decembre', 'janvier', 'fevrier'
+        'septembre', 'octobre', 'novembre', 'decembre', 'janvier', 'fevrier',
+        'mars', 'avril', 'mai', 'juin', 'juillet'
     }
     
     MONTH_NORMALIZATION = {
