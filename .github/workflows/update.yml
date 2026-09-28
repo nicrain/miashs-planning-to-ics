@@ -3,10 +3,6 @@
 name: Scheduled Calendar Generator
 
 on:
-  # 使用 Cron 语法设置定时运行。
-  # 示例：'0 */4 * * *' 表示每 4 小时执行一次 (UTC 时间)
-  schedule:
-    - cron: '0 */4 * * *' 
   # 允许在 GitHub 界面手动点击按钮运行，方便测试
   workflow_dispatch:
 
